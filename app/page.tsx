@@ -1,65 +1,194 @@
-import Image from "next/image";
+"use client"
+
+import { useState } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { createPasteSchema, type CreatePasteInput } from "@/lib/schemas"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { Copy, Check, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 export default function Home() {
+  const [pasteUrl, setPasteUrl] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+  } = useForm<CreatePasteInput>({
+    resolver: zodResolver(createPasteSchema),
+    defaultValues: {
+      content: "",
+      ttl_seconds: undefined,
+      max_views: undefined,
+    },
+  })
+
+  const onSubmit = async (data: CreatePasteInput) => {
+    setIsSubmitting(true)
+    try {
+      const response = await fetch("/api/pastes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        toast.error(error.error || "Failed to create paste")
+        return
+      }
+
+      const result = await response.json()
+      setPasteUrl(result.url)
+      reset()
+      toast.success("Paste created successfully!")
+    } catch (error) {
+      console.error("Error creating paste:", error)
+      toast.error("Failed to create paste. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const copyToClipboard = async () => {
+    if (pasteUrl) {
+      await navigator.clipboard.writeText(pasteUrl)
+      setCopied(true)
+      toast.success("URL copied to clipboard!")
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-4xl font-bold text-foreground mb-2">Pastebin-Lite</h1>
+            <p className="text-muted-foreground">
+              Share text snippets with optional expiration and view limits
+            </p>
+          </div>
+          <ThemeToggle />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Create a New Paste</CardTitle>
+            <CardDescription>
+              Enter your text and optionally set expiration time or view limits
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="content">Content *</Label>
+                <Textarea
+                  id="content"
+                  placeholder="Paste your text here..."
+                  className="min-h-[200px] font-mono"
+                  {...register("content")}
+                />
+                {errors.content && (
+                  <p className="text-sm text-destructive">{errors.content.message}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="ttl_seconds">TTL (Time to Live) in seconds</Label>
+                  <Input
+                    id="ttl_seconds"
+                    type="number"
+                    placeholder="e.g., 3600"
+                    {...register("ttl_seconds", {
+                      valueAsNumber: true,
+                    })}
+                  />
+                  {errors.ttl_seconds && (
+                    <p className="text-sm text-destructive">{errors.ttl_seconds.message}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Optional: Paste will expire after this many seconds
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="max_views">Max Views</Label>
+                  <Input
+                    id="max_views"
+                    type="number"
+                    placeholder="e.g., 5"
+                    {...register("max_views", {
+                      valueAsNumber: true,
+                    })}
+                  />
+                  {errors.max_views && (
+                    <p className="text-sm text-destructive">{errors.max_views.message}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Optional: Paste will expire after this many views
+                  </p>
+                </div>
+              </div>
+
+              <Button type="submit" disabled={isSubmitting} className="w-full">
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  "Create Paste"
+                )}
+              </Button>
+            </form>
+
+            {pasteUrl && (
+              <div className="mt-6 p-4 bg-muted rounded-lg border border-border">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <Label className="text-sm text-muted-foreground mb-1 block">
+                      Your paste URL:
+                    </Label>
+                    <a
+                      href={pasteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline break-all text-sm font-mono"
+                    >
+                      {pasteUrl}
+                    </a>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={copyToClipboard}
+                    className="shrink-0"
+                  >
+                    {copied ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
-  );
+  )
 }
